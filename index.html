@@ -7,7 +7,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: monospace; 
             background-color: #161512;
             color: #ffffff;
             display: flex;
@@ -251,7 +251,7 @@
         }
 
         .settings-grid {
-            display: grid;
+            display: none; 
             grid-template-columns: repeat(4, 1fr);
             gap: 12px;
         }
@@ -299,18 +299,22 @@
 
 <div class="settings-container">
     <div class="custom-select-wrapper">
-        <div class="custom-select" onclick="toggleDropdown()">
+        <div class="custom-select" onclick="if(event.target.id !== 'settings-btn') toggleDropdown()">
             <span id="selected-preset">선택</span>
-            <span>▼</span>
+            <div>
+                <span id="settings-btn" style="display: none; cursor: pointer; margin-right: 8px;" onclick="toggleSettings()">⚙️</span>
+                <span>▼</span>
+            </div>
         </div>
         <div class="custom-options" id="preset-options">
             <div class="custom-option" onclick="applyPreset('Stockfish 19 Fast Analyze')">Stockfish 19 Fast Analyze</div>
             <div class="custom-option" onclick="applyPreset('Stockfish 19 Max')">Stockfish 19 Max</div>
             <div class="custom-option" onclick="applyPreset('Stockfish 19 Instant')">Stockfish 19 Instant</div>
+            <div class="custom-option" onclick="applyPreset('Custom')">Custom</div>
         </div>
     </div>
 
-    <div class="settings-grid">
+    <div class="settings-grid" id="settings-grid-panel">
         <div class="setting-item">
             <label>Threads</label>
             <input type="number" id="opt-threads" value="1">
@@ -357,7 +361,6 @@
         <div class="left-controls">
             <div class="status-indicator" id="status-icon">■</div>
             <div class="engine-title">Stockfish 19</div>
-            <div class="engine-speed" id="stat-nps">0.0 Mn/s</div>
         </div>
         <div class="right-stats">
             <div class="stat-item">
@@ -388,16 +391,16 @@
 <script>
     const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['websocket'] });
     
-    let TARGET_DEPTH = 24;
+    let TARGET_DEPTH = 20;
 
     function requestAnalysis() {
         const fen = document.getElementById('fen-input').value;
-        TARGET_DEPTH = parseInt(document.getElementById('opt-depth').value) || 24;
+        TARGET_DEPTH = parseInt(document.getElementById('opt-depth').value) || 20;
         
         document.getElementById('status-icon').innerText = "▶";
         document.getElementById('status-icon').style.color = "#81b64c";
         document.getElementById('fill-line').style.width = '0%';
-        document.getElementById('moves-output').innerText = "수 연산 중...";
+        document.getElementById('moves-output').innerText = "Analyzing...";
 
         const analysisOptions = {
             fen: fen,
@@ -473,19 +476,40 @@
         document.getElementById('preset-options').classList.toggle('open');
     }
 
+    function toggleSettings() {
+        const gridPanel = document.getElementById('settings-grid-panel');
+        if (gridPanel.style.display === 'none' || gridPanel.style.display === '') {
+            gridPanel.style.display = 'grid';
+        } else {
+            gridPanel.style.display = 'none';
+        }
+    }
+
     function applyPreset(presetName) {
         document.getElementById('selected-preset').innerText = presetName;
-        const config = presets[presetName];
-        if (config) {
-            document.getElementById('opt-threads').value = config.threads;
-            document.getElementById('opt-hash').value = config.hash;
-            document.getElementById('opt-skill').value = config.skill;
-            document.getElementById('opt-overhead').value = config.overhead;
-            document.getElementById('opt-depth').value = config.depth;
-            document.getElementById('opt-time').value = config.time;
-            document.getElementById('opt-nodes').value = config.nodes;
-            document.getElementById('opt-ponder').checked = config.ponder;
-            document.getElementById('opt-infinity').checked = config.infinity;
+        document.querySelector('.engine-title').innerText = presetName;
+        
+        const settingsBtn = document.getElementById('settings-btn');
+        const gridPanel = document.getElementById('settings-grid-panel');
+
+        if (presetName === 'Custom') {
+            settingsBtn.style.display = 'inline-block';
+        } else {
+            settingsBtn.style.display = 'none';
+            gridPanel.style.display = 'none';
+            
+            const config = presets[presetName];
+            if (config) {
+                document.getElementById('opt-threads').value = config.threads;
+                document.getElementById('opt-hash').value = config.hash;
+                document.getElementById('opt-skill').value = config.skill;
+                document.getElementById('opt-overhead').value = config.overhead;
+                document.getElementById('opt-depth').value = config.depth;
+                document.getElementById('opt-time').value = config.time;
+                document.getElementById('opt-nodes').value = config.nodes;
+                document.getElementById('opt-ponder').checked = config.ponder;
+                document.getElementById('opt-infinity').checked = config.infinity;
+            }
         }
         document.getElementById('preset-options').classList.remove('open');
     }
