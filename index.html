@@ -386,7 +386,7 @@
 </div>
 
 <script>
-    const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['polling'] });
+    const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['websocket'] });
     
     let TARGET_DEPTH = 24;
 
