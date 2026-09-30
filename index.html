@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stockfish Live Analyzer</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- 1. 외부 CDN을 통해 Socket.IO 클라이언트 라이브러리 로드 -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -228,7 +229,13 @@
 </div>
 
 <script>
-    const socket = io();
+    // 2. 서버 주소 명시적 연결
+    // Python(FastAPI) 백엔드 사용시:
+    // const socket = io("https://stockfish-analyzer.serveousercontent.com", { path: '/socket.io' }); 
+    
+    // Node.js(Express) 백엔드 사용시:
+    const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['websocket', 'polling'] });
+    
     const TARGET_DEPTH = 24;
 
     function requestAnalysis() {
