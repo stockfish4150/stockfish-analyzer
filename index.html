@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stockfish Live Analyzer</title>
-    <!-- 1. 외부 CDN을 통해 Socket.IO 클라이언트 라이브러리 로드 -->
+    <title>Stockfish Chess Analyzer</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body {
@@ -192,14 +191,14 @@
 
 <div class="config-box">
     <input type="text" id="fen-input" value="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1">
-    <button onclick="requestAnalysis()">분석 실행</button>
+    <button onclick="requestAnalysis()">분석</button>
 </div>
 
 <div class="panel-container">
     <div class="top-row">
         <div class="left-controls">
             <div class="status-indicator" id="status-icon">■</div>
-            <div class="engine-title">Stockfish 19 Analyze</div>
+            <div class="engine-title">Stockfish 19</div>
             <div class="engine-speed" id="stat-nps">0.0 Mn/s</div>
         </div>
         <div class="right-stats">
@@ -224,16 +223,11 @@
 
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">엔진 준비 완료. 분석 단추를 누르세요.</div>
+        <div class="moves-line" id="moves-output">Engine loaded!</div>
     </div>
 </div>
 
 <script>
-    // 2. 서버 주소 명시적 연결
-    // Python(FastAPI) 백엔드 사용시:
-    // const socket = io("https://stockfish-analyzer.serveousercontent.com", { path: '/socket.io' }); 
-    
-    // Node.js(Express) 백엔드 사용시:
     const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['polling'] });
     
     const TARGET_DEPTH = 24;
@@ -244,7 +238,7 @@
         document.getElementById('status-icon').innerText = "▶";
         document.getElementById('status-icon').style.color = "#81b64c";
         document.getElementById('fill-line').style.width = '0%';
-        document.getElementById('moves-output').innerText = "수 연산 중...";
+        document.getElementById('moves-output').innerText = "Analyzing...";
 
         socket.emit('start-analysis', { fen: fen, targetDepth: TARGET_DEPTH });
     }
@@ -252,11 +246,9 @@
     socket.on('analysis-progress', (data) => {
         if (!data) return;
 
-        // 진행률 업데이트
         const progressPercent = Math.min(Math.round((data.depth / TARGET_DEPTH) * 100), 100);
         document.getElementById('fill-line').style.width = progressPercent + '%';
         
-        // 데이터 매핑 (NaN 방지 처리)
         document.getElementById('stat-depth').innerText = data.depth || 0;
         
         const nodesVal = data.nodes ? (data.nodes / 1000000).toFixed(2) : "0.00";
@@ -265,7 +257,6 @@
         const npsVal = data.nps ? (data.nps / 1000000).toFixed(1) : "0.0";
         document.getElementById('stat-nps').innerText = npsVal + ' Mn/s';
 
-        // 평가 점수 부호 처리
         let scoreStr = data.score || "0.00";
         if (scoreStr !== "0.00" && !scoreStr.startsWith('-') && !scoreStr.startsWith('M')) {
             scoreStr = '+' + scoreStr;
@@ -285,7 +276,7 @@
     });
 
     function parsePvToHtml(pvString) {
-        if (!pvString) return "연산 중...";
+        if (!pvString) return "Analyzing...";
         const moves = pvString.trim().split(/\s+/);
         let html = "";
         let moveNumber = 1;
