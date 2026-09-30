@@ -375,6 +375,10 @@
                 <span class="stat-label">NODES</span>
                 <span class="stat-value" id="stat-nodes">0.00M</span>
             </div>
+            <div class="stat-item">
+                <span class="stat-label">NPS</span>
+                <span class="stat-value" id="stat-nps">0.0 Mn/s</span>
+            </div>
         </div>
     </div>
 
@@ -430,7 +434,10 @@
         document.getElementById('stat-nodes').innerText = nodesVal + 'M';
 
         const npsVal = data.nps ? (data.nps / 1000000).toFixed(1) : "0.0";
-        document.getElementById('stat-nps').innerText = npsVal + ' Mn/s';
+        const statNps = document.getElementById('stat-nps');
+        if (statNps) {
+            statNps.innerText = npsVal + ' Mn/s';
+        }
 
         let scoreStr = String(data.score || "0.00");
         if (scoreStr !== "0.00" && !scoreStr.startsWith('-') && !scoreStr.startsWith('M')) {
