@@ -185,6 +185,109 @@
             font-weight: 600;
             margin-right: 12px;
         }
+
+        .settings-container {
+            width: 780px;
+            max-width: 100%;
+            margin-bottom: 12px;
+            background-color: #21201d;
+            border-radius: 4px;
+            padding: 12px 14px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .custom-select-wrapper {
+            position: relative;
+            user-select: none;
+            width: 100%;
+        }
+
+        .custom-select {
+            background-color: #161512;
+            border: 1px solid #3d3b36;
+            color: #ffffff;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .custom-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: #161512;
+            border: 1px solid #3d3b36;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            z-index: 10;
+            display: none;
+        }
+
+        .custom-options.open {
+            display: block;
+        }
+
+        .custom-option {
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #2d2b27;
+        }
+
+        .custom-option:last-child {
+            border-bottom: none;
+        }
+
+        .custom-option:hover {
+            background-color: #2d2b27;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .setting-item label {
+            font-size: 0.75rem;
+            color: #8b8984;
+            font-weight: 700;
+        }
+
+        .setting-item input[type="number"] {
+            background-color: #161512;
+            border: 1px solid #3d3b36;
+            color: #ffffff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .setting-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: #ffffff;
+            height: 100%;
+            padding-top: 18px; 
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -192,6 +295,61 @@
 <div class="config-box">
     <input type="text" id="fen-input" value="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1">
     <button onclick="requestAnalysis()">분석</button>
+</div>
+
+<div class="settings-container">
+    <div class="custom-select-wrapper">
+        <div class="custom-select" onclick="toggleDropdown()">
+            <span id="selected-preset">선택</span>
+            <span>▼</span>
+        </div>
+        <div class="custom-options" id="preset-options">
+            <div class="custom-option" onclick="applyPreset('Stockfish 19 Fast Analyze')">Stockfish 19 Fast Analyze</div>
+            <div class="custom-option" onclick="applyPreset('Stockfish 19 Max')">Stockfish 19 Max</div>
+            <div class="custom-option" onclick="applyPreset('Stockfish 19 Instant')">Stockfish 19 Instant</div>
+        </div>
+    </div>
+
+    <div class="settings-grid">
+        <div class="setting-item">
+            <label>Threads</label>
+            <input type="number" id="opt-threads" value="1">
+        </div>
+        <div class="setting-item">
+            <label>Hash</label>
+            <input type="number" id="opt-hash" value="16">
+        </div>
+        <div class="setting-item">
+            <label>Skill Level</label>
+            <input type="number" id="opt-skill" value="20">
+        </div>
+        <div class="setting-item">
+            <label>Move Overhead</label>
+            <input type="number" id="opt-overhead" value="10">
+        </div>
+        <div class="setting-item">
+            <label>Depth</label>
+            <input type="number" id="opt-depth" value="24">
+        </div>
+        <div class="setting-item">
+            <label>Time (ms)</label>
+            <input type="number" id="opt-time" value="0">
+        </div>
+        <div class="setting-item">
+            <label>Nodes</label>
+            <input type="number" id="opt-nodes" value="0">
+        </div>
+        <div class="setting-item">
+            <label class="setting-checkbox">
+                <input type="checkbox" id="opt-ponder"> Ponder
+            </label>
+        </div>
+        <div class="setting-item">
+            <label class="setting-checkbox">
+                <input type="checkbox" id="opt-infinity"> Infinity
+            </label>
+        </div>
+    </div>
 </div>
 
 <div class="panel-container">
@@ -230,17 +388,31 @@
 <script>
     const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['polling'] });
     
-    const TARGET_DEPTH = 24;
+    let TARGET_DEPTH = 24;
 
     function requestAnalysis() {
         const fen = document.getElementById('fen-input').value;
+        TARGET_DEPTH = parseInt(document.getElementById('opt-depth').value) || 24;
         
         document.getElementById('status-icon').innerText = "▶";
         document.getElementById('status-icon').style.color = "#81b64c";
         document.getElementById('fill-line').style.width = '0%';
-        document.getElementById('moves-output').innerText = "Analyzing...";
+        document.getElementById('moves-output').innerText = "수 연산 중...";
 
-        socket.emit('start-analysis', { fen: fen, targetDepth: TARGET_DEPTH });
+        const analysisOptions = {
+            fen: fen,
+            targetDepth: TARGET_DEPTH,
+            threads: parseInt(document.getElementById('opt-threads').value),
+            hash: parseInt(document.getElementById('opt-hash').value),
+            skillLevel: parseInt(document.getElementById('opt-skill').value),
+            moveOverhead: parseInt(document.getElementById('opt-overhead').value),
+            time: parseInt(document.getElementById('opt-time').value),
+            nodes: parseInt(document.getElementById('opt-nodes').value),
+            ponder: document.getElementById('opt-ponder').checked,
+            infinity: document.getElementById('opt-infinity').checked
+        };
+
+        socket.emit('start-analysis', analysisOptions);
     }
 
     socket.on('analysis-progress', (data) => {
@@ -290,6 +462,43 @@
         }
         return html;
     }
+
+    const presets = {
+        'Stockfish 19 Analyze': { threads: 2, hash: 16, skill: 20, overhead: 10, depth: 18, time: 1000, nodes: 0, ponder: false, infinity: false },
+        'Stockfish 19 Max': { threads: 8, hash: 1024, skill: 20, overhead: 10, depth: 30, time: 5000, nodes: 0, ponder: true, infinity: false },
+        'Stockfish 19 Instant': { threads: 1, hash: 16, skill: 20, overhead: 10, depth: 12, time: 100, nodes: 0, ponder: false, infinity: false }
+    };
+
+    function toggleDropdown() {
+        document.getElementById('preset-options').classList.toggle('open');
+    }
+
+    function applyPreset(presetName) {
+        document.getElementById('selected-preset').innerText = presetName;
+        const config = presets[presetName];
+        if (config) {
+            document.getElementById('opt-threads').value = config.threads;
+            document.getElementById('opt-hash').value = config.hash;
+            document.getElementById('opt-skill').value = config.skill;
+            document.getElementById('opt-overhead').value = config.overhead;
+            document.getElementById('opt-depth').value = config.depth;
+            document.getElementById('opt-time').value = config.time;
+            document.getElementById('opt-nodes').value = config.nodes;
+            document.getElementById('opt-ponder').checked = config.ponder;
+            document.getElementById('opt-infinity').checked = config.infinity;
+        }
+        document.getElementById('preset-options').classList.remove('open');
+    }
+
+    document.addEventListener('click', function(event) {
+        const wrapper = document.querySelector('.custom-select-wrapper');
+        if (wrapper && !wrapper.contains(event.target)) {
+            const options = document.getElementById('preset-options');
+            if (options && options.classList.contains('open')) {
+                options.classList.remove('open');
+            }
+        }
+    });
 </script>
 </body>
 </html>
