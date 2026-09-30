@@ -69,6 +69,8 @@
             justify-content: space-between;
             padding: 12px 14px;
             background-color: #21201d;
+            flex-wrap: wrap;
+            gap: 12px;
         }
 
         .left-controls {
@@ -109,6 +111,7 @@
             display: flex;
             align-items: center;
             gap: 24px;
+            flex-wrap: wrap;
         }
 
         .stat-item {
@@ -168,10 +171,11 @@
         .moves-line {
             font-size: 0.9rem;
             color: #c3c2c0;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow-x: auto;
             white-space: nowrap;
             flex: 1;
+            min-width: 0;
+            padding-bottom: 4px;
         }
 
         .moves-line .move-num {
@@ -252,7 +256,7 @@
 
         .settings-grid {
             display: none; 
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             gap: 12px;
         }
 
@@ -287,6 +291,32 @@
             height: 100%;
             padding-top: 18px; 
             cursor: pointer;
+        }
+
+        .moves-line::-webkit-scrollbar {
+            height: 6px;
+        }
+        .moves-line::-webkit-scrollbar-track {
+            background: #1a1916;
+            border-radius: 3px;
+        }
+        .moves-line::-webkit-scrollbar-thumb {
+            background: #3d3b36;
+            border-radius: 3px;
+        }
+        .moves-line::-webkit-scrollbar-thumb:hover {
+            background: #62615e;
+        }
+        
+        @media (max-width: 600px) {
+            .config-box {
+                flex-direction: column;
+            }
+            
+            .config-box button {
+                padding: 12px 0;
+                width: 100%;
+            }
         }
     </style>
 </head>
