@@ -163,7 +163,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v3.1</div>
+        <div class="moves-line" id="moves-output">Version: v3.2</div>
     </div>
 </div>
 
@@ -191,7 +191,7 @@
     let BASE_URL = "https://stockfish-analyzer.serveousercontent.com";
     let socket = null;
     
-    let TARGET_DEPTH = 20; let IS_INFINITY = false; let currentMaxDepth = 0; let currentBestPvLength = 0;
+    let TARGET_DEPTH = 20; let IS_INFINITY = false; let currentMaxDepth = 0; let currentBestPvLength = 0; let currentNodes = 0; let currentNps = 0;
 
     async function initServerConnection(retryCount = 0) {
         document.getElementById('user-info-text').innerText = "서버를 찾는 중입니다.";
@@ -245,10 +245,12 @@
         
         socket.on('analysis-progress', (data) => {
             if (data.depth > currentMaxDepth) { currentMaxDepth = data.depth; }
+            if (data.nodes > 0) { currentNodes = data.nodes; }
+            if (data.nps > 0) { currentNps = data.nps; }
             document.getElementById('stat-depth').innerText = currentMaxDepth || 0;
-            document.getElementById('stat-nodes').innerText = data.nodes ? (data.nodes / 1000000).toFixed(2) + 'M' : "0.00M";
-            document.getElementById('stat-nps').innerText = data.nps ? (data.nps / 1000000).toFixed(1) + ' Mn/s' : "0.0 Mn/s";
-            if (currentUser && data.nodes) { document.getElementById('user-info-text').innerHTML = `[${tierNames[currentUser.tier]}] <b>${currentUser.account_id}</b> [남은 노드]: ${(Math.max(0, currentUser.remaining_nodes - data.nodes) / 1000000).toFixed(1)}M`; }
+            document.getElementById('stat-nodes').innerText = currentNodes ? (currentNodes / 1000000).toFixed(2) + 'M' : "0.00M";
+            document.getElementById('stat-nps').innerText = currentNps ? (currentNps / 1000000).toFixed(1) + ' Mn/s' : "0.0 Mn/s";
+            if (currentUser && currentNodes) { document.getElementById('user-info-text').innerHTML = `[${tierNames[currentUser.tier]}] <b>${currentUser.account_id}</b> [남은 노드]: ${(Math.max(0, currentUser.remaining_nodes - currentNodes) / 1000000).toFixed(1)}M`; }
             if (!IS_INFINITY) { document.getElementById('fill-line').style.width = Math.min(Math.round((currentMaxDepth / TARGET_DEPTH) * 100), 100) + '%'; }
             
             let scoreStr = String(data.score || "0.00");
@@ -386,7 +388,7 @@
         if (!optDepth && !optTime && !optNodes) { IS_INFINITY = true; }
         if (IS_INFINITY) { optDepth = null; optTime = null; optNodes = null; }
 
-        TARGET_DEPTH = optDepth || 20; currentMaxDepth = 0; currentBestPvLength = 0;
+        TARGET_DEPTH = optDepth || 20; currentMaxDepth = 0; currentBestPvLength = 0; currentNodes = 0; currentNps = 0;
         
         document.getElementById('status-icon').innerText = "■"; document.getElementById('status-icon').style.color = "#3b82f6";
         document.getElementById('fill-line').style.width = IS_INFINITY ? '100%' : '0%';
