@@ -192,19 +192,37 @@
     
     let TARGET_DEPTH = 20; let IS_INFINITY = false; let IS_LOCAL_ROUTING = false; let currentMaxDepth = 0; let currentBestPvLength = 0; let localEngine = null;
 
-    async function initServerConnection() {
+    async function initServerConnection(retryCount = 0) {
+        document.getElementById('user-info-text').innerText = "활성 서버를 탐색 중입니다...";
+        let found = false;
+
         for (let i = 1; i <= 10; i++) {
             const suffix = i === 1 ? "" : i;
             const testUrl = `https://stockfish-analyzer${suffix}.serveousercontent.com`;
             try {
-                const res = await fetch(`${testUrl}/`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 1500); 
+                const res = await fetch(`${testUrl}/`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
                 if (res.ok) {
                     BASE_URL = testUrl;
+                    found = true;
+                    console.log(`[연결 성공] ${BASE_URL} 에 연결되었습니다.`);
                     break;
                 }
             } catch (e) {
-                console.log(`${testUrl} 다른 백엔드 서버로 연결합니다.`);
             }
+        }
+
+        if (!found) {
+            if (retryCount < 2) {
+                document.getElementById('user-info-text').innerText = "서버가 부팅 중입니다. 잠시 후 재시도합니다...";
+                setTimeout(() => initServerConnection(retryCount + 1), 3000);
+                return;
+            }
+            document.getElementById('user-info-text').innerText = "현재 백엔드 서버가 꺼져있습니다.";
+            return;
         }
 
         socket = io(BASE_URL, { transports: ['websocket'], perMessageDeflate: true });
