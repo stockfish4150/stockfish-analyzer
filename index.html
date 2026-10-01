@@ -160,7 +160,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v2.3.1</div>
+        <div class="moves-line" id="moves-output">Version: v2.3.2</div>
     </div>
 </div>
 
@@ -410,15 +410,6 @@
             socket.emit('start-analysis', analysisOptions);
         }
     }
-    
-    socket.on('analysis-complete', (data) => {
-        document.getElementById('status-icon').innerText = "▶";
-        document.getElementById('status-icon').style.color = "#bababa";
-        document.getElementById('fill-line').style.width = '100%';
-        document.getElementById('fill-line').classList.remove('analyzing');
-        if (data.status === 'error' && data.msg) alert(data.msg);
-        fetchUserInfo();
-    });
 
     function toggleDropdown() { document.getElementById('preset-options').classList.toggle('open'); }
     function toggleSettings() { const gp = document.getElementById('settings-grid-panel'); gp.style.display = (gp.style.display === 'none' || gp.style.display === '') ? 'grid' : 'none'; }
