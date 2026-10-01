@@ -272,7 +272,8 @@
             font-weight: 700;
         }
 
-        .setting-item input[type="number"] {
+        .setting-item input[type="number"],
+        .setting-item select {
             background-color: #161512;
             border: 1px solid #3d3b36;
             color: #ffffff;
@@ -367,28 +368,31 @@
             <label>Move Overhead</label>
             <input type="number" id="opt-overhead" value="10">
         </div>
-        <div class="setting-item">
-            <label>Depth</label>
-            <input type="number" id="opt-depth" value="24">
+        
+        <div class="setting-item" style="grid-column: span 2;">
+            <label>Limit</label>
+            <div style="display: flex; gap: 8px;">
+                <select id="opt-limit-type" onchange="syncLimitToHidden()" style="flex: 1;">
+                    <option value="time">Time</option>
+                    <option value="depth" selected>Depth</option>
+                    <option value="nodes">Nodes</option>
+                    <option value="infinity">Infinite</option>
+                </select>
+                <input type="number" id="opt-limit-value" value="24" oninput="syncLimitToHidden()" style="flex: 1; min-width: 0;">
+            </div>
         </div>
-        <div class="setting-item">
-            <label>Time (ms)</label>
-            <input type="number" id="opt-time" value="0">
-        </div>
-        <div class="setting-item">
-            <label>Nodes</label>
-            <input type="number" id="opt-nodes" value="0">
-        </div>
+        
         <div class="setting-item">
             <label class="setting-checkbox">
                 <input type="checkbox" id="opt-ponder"> Ponder
             </label>
         </div>
-        <div class="setting-item">
-            <label class="setting-checkbox">
-                <input type="checkbox" id="opt-infinity"> Infinity
-            </label>
-        </div>
+        
+        <!-- 기존 로직과의 호환성을 위한 숨김 필드 -->
+        <input type="hidden" id="opt-depth" value="24">
+        <input type="hidden" id="opt-time" value="0">
+        <input type="hidden" id="opt-nodes" value="0">
+        <input type="checkbox" id="opt-infinity" style="display: none;">
     </div>
 </div>
 
@@ -558,6 +562,27 @@
         }
     }
 
+    function syncLimitToHidden() {
+        const limitType = document.getElementById('opt-limit-type').value;
+        const limitValue = document.getElementById('opt-limit-value').value;
+        const limitInput = document.getElementById('opt-limit-value');
+        
+        document.getElementById('opt-depth').value = 0;
+        document.getElementById('opt-time').value = 0;
+        document.getElementById('opt-nodes').value = 0;
+        document.getElementById('opt-infinity').checked = false;
+
+        if (limitType === 'infinity') {
+            limitInput.style.display = 'none';
+            document.getElementById('opt-infinity').checked = true;
+        } else {
+            limitInput.style.display = 'block';
+            if (limitType === 'depth') document.getElementById('opt-depth').value = limitValue;
+            if (limitType === 'time') document.getElementById('opt-time').value = limitValue;
+            if (limitType === 'nodes') document.getElementById('opt-nodes').value = limitValue;
+        }
+    }
+
     function applyPreset(presetName) {
         document.getElementById('selected-preset').innerText = presetName;
         document.querySelector('.engine-title').innerText = presetName;
@@ -582,6 +607,23 @@
                 document.getElementById('opt-nodes').value = config.nodes;
                 document.getElementById('opt-ponder').checked = config.ponder;
                 document.getElementById('opt-infinity').checked = config.infinity;
+                
+                if (config.infinity) {
+                    document.getElementById('opt-limit-type').value = 'infinity';
+                    document.getElementById('opt-limit-value').style.display = 'none';
+                } else if (config.time > 0 && config.depth === 0) {
+                    document.getElementById('opt-limit-type').value = 'time';
+                    document.getElementById('opt-limit-value').value = config.time;
+                    document.getElementById('opt-limit-value').style.display = 'block';
+                } else if (config.nodes > 0) {
+                    document.getElementById('opt-limit-type').value = 'nodes';
+                    document.getElementById('opt-limit-value').value = config.nodes;
+                    document.getElementById('opt-limit-value').style.display = 'block';
+                } else {
+                    document.getElementById('opt-limit-type').value = 'depth';
+                    document.getElementById('opt-limit-value').value = config.depth;
+                    document.getElementById('opt-limit-value').style.display = 'block';
+                }
             }
         }
         document.getElementById('preset-options').classList.remove('open');
