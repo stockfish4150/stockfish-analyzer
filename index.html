@@ -425,15 +425,52 @@
     const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['websocket'] });
     
     let TARGET_DEPTH = 20;
+    let IS_INFINITY = false;
+    let IS_LOCAL_ROUTING = false;
     let currentMaxDepth = 0;
     let currentBestPvLength = 0;
+
+    let localEngine = null;
+
+    function parseLocalStockfishLine(line) {
+        if (!line.startsWith("info") || !line.includes("depth")) return null;
+        
+        const depthMatch = line.match(/depth (\d+)/);
+        const nodesMatch = line.match(/nodes (\d+)/);
+        const npsMatch = line.match(/nps (\d+)/);
+        const pvMatch = line.match(/ pv (.+)/);
+        
+        let score = "0.00";
+        if (line.includes("score cp")) {
+            const cpMatch = line.match(/score cp (-?\d+)/);
+            if (cpMatch) score = (parseInt(cpMatch[1]) / 100).toFixed(2);
+        } else if (line.includes("score mate")) {
+            const mateMatch = line.match(/score mate (-?\d+)/);
+            if (mateMatch) score = "M" + mateMatch[1];
+        }
+
+        if (depthMatch) {
+            return {
+                depth: parseInt(depthMatch[1]),
+                nodes: nodesMatch ? parseInt(nodesMatch[1]) : 0,
+                nps: npsMatch ? parseInt(npsMatch[1]) : 0,
+                score: score,
+                pv: pvMatch ? pvMatch[1] : ""
+            };
+        }
+        return null;
+    }
 
     function toggleAnalysis() {
         const icon = document.getElementById('status-icon');
         if (icon.innerText === "▶") {
             requestAnalysis();
         } else {
-            socket.emit('stop-analysis');
+            if (IS_LOCAL_ROUTING && localEngine) {
+                localEngine.postMessage("stop");
+            } else {
+                socket.emit('stop-analysis');
+            }
             icon.innerText = "▶";
             icon.style.color = "#bababa";
             
@@ -443,14 +480,41 @@
 
     function requestAnalysis() {
         const fen = document.getElementById('fen-input').value;
-        TARGET_DEPTH = parseInt(document.getElementById('opt-depth').value) || 20;
+        
+        let optDepth = parseInt(document.getElementById('opt-depth').value);
+        let optTime = parseInt(document.getElementById('opt-time').value);
+        let optNodes = parseInt(document.getElementById('opt-nodes').value);
+        IS_INFINITY = document.getElementById('opt-infinity').checked;
+
+        if (isNaN(optDepth) || optDepth <= 0) optDepth = null;
+        if (isNaN(optTime) || optTime <= 0) optTime = null;
+        if (isNaN(optNodes) || optNodes <= 0) optNodes = null;
+
+        if (!optDepth && !optTime && !optNodes) {
+            IS_INFINITY = true;
+        }
+
+        if (IS_INFINITY) {
+            optDepth = null;
+            optTime = null;
+            optNodes = null;
+        }
+
+        IS_LOCAL_ROUTING = IS_INFINITY || (optTime !== null && optTime > 10000);
+
+        TARGET_DEPTH = optDepth || 20;
         
         currentMaxDepth = 0;
         currentBestPvLength = 0;
         
         document.getElementById('status-icon').innerText = "■";
         document.getElementById('status-icon').style.color = "#3b82f6";
-        document.getElementById('fill-line').style.width = '0%';
+        
+        if (IS_INFINITY) {
+            document.getElementById('fill-line').style.width = '100%';
+        } else {
+            document.getElementById('fill-line').style.width = '0%';
+        }
         
         document.getElementById('fill-line').classList.add('analyzing');
 
@@ -458,21 +522,57 @@
 
         const analysisOptions = {
             fen: fen,
-            targetDepth: TARGET_DEPTH,
             threads: parseInt(document.getElementById('opt-threads').value),
             hash: parseInt(document.getElementById('opt-hash').value),
             skillLevel: parseInt(document.getElementById('opt-skill').value),
             moveOverhead: parseInt(document.getElementById('opt-overhead').value),
-            time: parseInt(document.getElementById('opt-time').value),
-            nodes: parseInt(document.getElementById('opt-nodes').value),
             ponder: document.getElementById('opt-ponder').checked,
-            infinity: document.getElementById('opt-infinity').checked
+            infinity: IS_INFINITY
         };
 
-        socket.emit('start-analysis', analysisOptions);
+        if (optDepth !== null) analysisOptions.targetDepth = optDepth;
+        if (optTime !== null) analysisOptions.time = optTime;
+        if (optNodes !== null) analysisOptions.nodes = optNodes;
+
+        if (IS_LOCAL_ROUTING) {
+            if (!localEngine) {
+                const blob = new Blob(["importScripts('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');"], {type: 'application/javascript'});
+                localEngine = new Worker(URL.createObjectURL(blob));
+                localEngine.onmessage = function(event) {
+                    const line = event.data;
+                    if (line.startsWith("bestmove")) {
+                        document.getElementById('status-icon').innerText = "▶";
+                        document.getElementById('status-icon').style.color = "#bababa";
+                        document.getElementById('fill-line').style.width = '100%';
+                        document.getElementById('fill-line').classList.remove('analyzing');
+                        return;
+                    }
+                    const parsedData = parseLocalStockfishLine(line);
+                    if (parsedData) handleAnalysisProgress(parsedData);
+                };
+            }
+            localEngine.postMessage("uci");
+            if (analysisOptions.threads) localEngine.postMessage("setoption name Threads value " + analysisOptions.threads);
+            if (analysisOptions.hash) localEngine.postMessage("setoption name Hash value " + analysisOptions.hash);
+            if (analysisOptions.skillLevel) localEngine.postMessage("setoption name Skill Level value " + analysisOptions.skillLevel);
+            if (analysisOptions.moveOverhead) localEngine.postMessage("setoption name Move Overhead value " + analysisOptions.moveOverhead);
+            localEngine.postMessage("position fen " + fen);
+            
+            if (IS_INFINITY) {
+                localEngine.postMessage("go infinite");
+            } else {
+                let goCmd = "go";
+                if (optTime !== null) goCmd += " movetime " + optTime;
+                if (optDepth !== null) goCmd += " depth " + optDepth;
+                if (optNodes !== null) goCmd += " nodes " + optNodes;
+                localEngine.postMessage(goCmd.trim());
+            }
+        } else {
+            socket.emit('start-analysis', analysisOptions);
+        }
     }
 
-    socket.on('analysis-progress', (data) => {
+    const handleAnalysisProgress = (data) => {
         if (!data) return;
 
         const newDepth = parseInt(data.depth) || 0;
@@ -494,8 +594,12 @@
             }
         }
 
-        const progressPercent = Math.min(Math.round((data.depth / TARGET_DEPTH) * 100), 100);
-        document.getElementById('fill-line').style.width = progressPercent + '%';
+        if (IS_INFINITY) {
+            document.getElementById('fill-line').style.width = '100%';
+        } else {
+            const progressPercent = Math.min(Math.round((data.depth / TARGET_DEPTH) * 100), 100);
+            document.getElementById('fill-line').style.width = progressPercent + '%';
+        }
         
         document.getElementById('stat-depth').innerText = data.depth || 0;
         
@@ -518,8 +622,10 @@
         if (data.pv) {
             document.getElementById('moves-output').innerHTML = parsePvToHtml(data.pv);
         }
-    });
+    };
 
+    socket.on('analysis-progress', handleAnalysisProgress);
+    
     socket.on('analysis-complete', (data) => {
         document.getElementById('status-icon').innerText = "▶";
         document.getElementById('status-icon').style.color = "#bababa";
@@ -545,15 +651,15 @@
     }
 
     const presets = {
-        'Stockfish 19 Zero': { threads: 1, hash: 8, skill: 20, overhead: 0, depth: 3, time: 10, nodes: 0, ponder: false, infinity: false },
-        'Stockfish 19 Instant': { threads: 1, hash: 16, skill: 20, overhead: 0, depth: 5, time: 100, nodes: 0, ponder: false, infinity: false },
-        'Stockfish 19 Fast': { threads: 1, hash: 32, skill: 20, overhead: 5, depth: 10, time: 10000, nodes: 0, ponder: false, infinity: false },
-        'Stockfish 19 Lite': { threads: 1, hash: 64, skill: 20, overhead: 5, depth: 10, time: 30000, nodes: 0, ponder: false, infinity: false },
-        'Stockfish 19 Plus': { threads: 2, hash: 128, skill: 20, overhead: 10, depth: 15, time: 50000, nodes: 0, ponder: false, infinity: false },
-        'Stockfish 19 Pro': { threads: 4, hash: 256, skill: 20, overhead: 15, depth: 20, time: 100000, nodes: 0, ponder: true, infinity: false },
-        'Stockfish 19 Ultra': { threads: 8, hash: 512, skill: 20, overhead: 20, depth: 25, time: 200000, nodes: 0, ponder: true, infinity: false },
-        'Stockfish 19 Max': { threads: 16, hash: 1024, skill: 20, overhead: 25, depth: 30, time: 300000, nodes: 0, ponder: true, infinity: false },
-        'Stockfish 19 Infinity': { threads: 32, hash: 1024, skill: 20, overhead: 30, depth: 35, time: 600000, nodes: 0, ponder: true, infinity: true }
+        'Stockfish 19 Zero': { threads: 1, hash: 8, skill: 20, overhead: 0, depth: 3, time: 10, nodes: 5000, ponder: false, infinity: false },
+        'Stockfish 19 Instant': { threads: 1, hash: 16, skill: 20, overhead: 0, depth: 5, time: 100, nodes: 30000, ponder: false, infinity: false },
+        'Stockfish 19 Fast': { threads: 1, hash: 32, skill: 20, overhead: 5, depth: 10, time: 1000, nodes: 100000, ponder: false, infinity: false },
+        'Stockfish 19 Lite': { threads: 1, hash: 64, skill: 20, overhead: 5, depth: 10, time: 3000, nodes: 500000, ponder: false, infinity: false },
+        'Stockfish 19 Plus': { threads: 2, hash: 128, skill: 20, overhead: 10, depth: 15, time: 5000, nodes: null, ponder: true, infinity: false },
+        'Stockfish 19 Pro': { threads: 4, hash: 256, skill: 20, overhead: 15, depth: 20, time: 9999, nodes: null, ponder: true, infinity: false },
+        'Stockfish 19 Ultra': { threads: 8, hash: 512, skill: 20, overhead: 20, depth: 25, time: 9999, nodes: null, ponder: true, infinity: false },
+        'Stockfish 19 Max': { threads: 16, hash: 1024, skill: 20, overhead: 25, depth: 30, time: 9999, nodes: null, ponder: true, infinity: false },
+        'Stockfish 19 Infinity': { threads: 32, hash: 1024, skill: 20, overhead: 30, depth: null, time: null, nodes: null, ponder: true, infinity: true }
     };
 
     function toggleDropdown() {
@@ -599,6 +705,7 @@
 
         if (presetName === 'Custom') {
             settingsBtn.style.display = 'inline-block';
+            syncLimitToHidden();
         } else {
             settingsBtn.style.display = 'none';
             gridPanel.style.display = 'none';
@@ -609,16 +716,17 @@
                 document.getElementById('opt-hash').value = config.hash;
                 document.getElementById('opt-skill').value = config.skill;
                 document.getElementById('opt-overhead').value = config.overhead;
-                document.getElementById('opt-depth').value = config.depth;
-                document.getElementById('opt-time').value = config.time;
-                document.getElementById('opt-nodes').value = config.nodes;
                 document.getElementById('opt-ponder').checked = config.ponder;
                 document.getElementById('opt-infinity').checked = config.infinity;
                 
+                document.getElementById('opt-depth').value = config.depth;
+                document.getElementById('opt-time').value = config.time;
+                document.getElementById('opt-nodes').value = config.nodes;
+
                 if (config.infinity) {
                     document.getElementById('opt-limit-type').value = 'infinity';
                     document.getElementById('opt-limit-value').style.display = 'none';
-                } else if (config.time > 0 && config.depth === 0) {
+                } else if (config.time > 0) {
                     document.getElementById('opt-limit-type').value = 'time';
                     document.getElementById('opt-limit-value').value = config.time;
                     document.getElementById('opt-limit-value').style.display = 'block';
