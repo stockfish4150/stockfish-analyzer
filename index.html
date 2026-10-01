@@ -479,6 +479,11 @@
     }
 
     function requestAnalysis() {
+        if (localEngine) {
+            localEngine.postMessage("stop");
+        }
+        socket.emit('stop-analysis');
+
         const fen = document.getElementById('fen-input').value;
         
         let optDepth = parseInt(document.getElementById('opt-depth').value);
