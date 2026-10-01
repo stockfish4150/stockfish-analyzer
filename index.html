@@ -194,7 +194,7 @@
     async function fetchUserInfo() {
         if (!currentToken) return updateAuthUI(null);
         try {
-            const res = await fetch("http://localhost:10000/api/me", { headers: { 'Authorization': `Bearer ${currentToken}` } });
+            const res = await fetch("https://stockfish-analyzer.serveousercontent.com/api/me", { headers: { 'Authorization': `Bearer ${currentToken}` } });
             if (res.ok) {
                 const data = await res.json();
                 currentUserTier = data.tier;
@@ -247,7 +247,7 @@
         
         const endpoint = authMode === "login" ? "/api/login" : "/api/register";
         try {
-            const res = await fetch(`http://localhost:10000${endpoint}`, {
+            const res = await fetch(`https://stockfish-analyzer.serveousercontent.com${endpoint}`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ account_id, password })
             });
