@@ -187,14 +187,60 @@
     let currentUserTier = -1;
     let currentToken = localStorage.getItem('chess_token');
 
-    const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['websocket'], perMessageDeflate: true });
+    let BASE_URL = "https://stockfish-analyzer.serveousercontent.com";
+    let socket = null;
     
     let TARGET_DEPTH = 20; let IS_INFINITY = false; let IS_LOCAL_ROUTING = false; let currentMaxDepth = 0; let currentBestPvLength = 0; let localEngine = null;
+
+    async function initServerConnection() {
+        for (let i = 1; i <= 10; i++) {
+            const suffix = i === 1 ? "" : i;
+            const testUrl = `https://stockfish-analyzer${suffix}.serveousercontent.com`;
+            try {
+                const res = await fetch(`${testUrl}/`);
+                if (res.ok) {
+                    BASE_URL = testUrl;
+                    break;
+                }
+            } catch (e) {
+                console.log(`${testUrl} 다른 백엔드 서버로 연결합니다.`);
+            }
+        }
+
+        socket = io(BASE_URL, { transports: ['websocket'], perMessageDeflate: true });
+        
+        socket.on('analysis-progress', (data) => {
+            document.getElementById('stat-depth').innerText = data.depth || 0;
+            document.getElementById('stat-nodes').innerText = data.nodes ? (data.nodes / 1000000).toFixed(2) + 'M' : "0.00M";
+            if (!IS_INFINITY) { document.getElementById('fill-line').style.width = Math.min(Math.round((data.depth / TARGET_DEPTH) * 100), 100) + '%'; }
+            
+            let scoreStr = String(data.score || "0.00");
+            if (scoreStr !== "0.00" && !scoreStr.startsWith('-') && !scoreStr.startsWith('M')) scoreStr = '+' + scoreStr;
+            document.getElementById('stat-eval').innerText = scoreStr; document.getElementById('badge-eval').innerText = scoreStr;
+            if (data.pv) {
+                const moves = Array.isArray(data.pv) ? data.pv : String(data.pv).trim().split(/\s+/);
+                let html = ""; let moveNumber = 1;
+                for (let i = 0; i < moves.length; i++) { if (i % 2 === 0) { html += `<span class="move-num">${moveNumber}.</span>`; moveNumber++; } html += `<span class="move-str">${moves[i]}</span>`; }
+                document.getElementById('moves-output').innerHTML = html;
+            }
+        });
+        
+        socket.on('analysis-complete', (data) => {
+            document.getElementById('status-icon').innerText = "▶";
+            document.getElementById('status-icon').style.color = "#bababa";
+            document.getElementById('fill-line').style.width = '100%';
+            document.getElementById('fill-line').classList.remove('analyzing');
+            if (data.status === 'error' && data.msg) alert(data.msg);
+            fetchUserInfo();
+        });
+
+        fetchUserInfo();
+    }
 
     async function fetchUserInfo() {
         if (!currentToken) return updateAuthUI(null);
         try {
-            const res = await fetch("https://stockfish-analyzer.serveousercontent.com/api/me", { headers: { 'Authorization': `Bearer ${currentToken}` } });
+            const res = await fetch(`${BASE_URL}/api/me`, { headers: { 'Authorization': `Bearer ${currentToken}` } });
             if (res.ok) {
                 const data = await res.json();
                 currentUserTier = data.tier;
@@ -247,7 +293,7 @@
         
         const endpoint = authMode === "login" ? "/api/login" : "/api/register";
         try {
-            const res = await fetch(`https://stockfish-analyzer.serveousercontent.com${endpoint}`, {
+            const res = await fetch(`${BASE_URL}${endpoint}`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ account_id, password })
             });
@@ -275,6 +321,7 @@
     }
 
     function toggleAnalysis() {
+        if (!socket) return alert("서버에 연결하는 중입니다. 잠시만 기다려주세요.");
         const icon = document.getElementById('status-icon');
         if (icon.innerText === "▶") {
             requestAnalysis();
@@ -410,6 +457,7 @@
             if (options && options.classList.contains('open')) options.classList.remove('open');
         }
     });
+    initServerConnection();
 </script>
 </body>
 </html>
