@@ -59,7 +59,6 @@
         .moves-line::-webkit-scrollbar-thumb:hover { background: #62615e; }
         @media (max-width: 600px) { .config-box { flex-direction: column; } }
 
-        /* 새로 추가된 UI CSS */
         .auth-bar { width: 780px; max-width: 100%; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 0.85rem; }
         .auth-btn { background-color: #3880b6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .auth-btn:hover { background-color: #2c6896; }
@@ -205,35 +204,39 @@
     let TARGET_DEPTH = 20; let IS_INFINITY = false; let IS_LOCAL_ROUTING = false; let currentMaxDepth = 0; let currentBestPvLength = 0; let localEngine = null;
 
     async function initServerConnection(retryCount = 0) {
-        document.getElementById('user-info-text').innerText = "활성 서버를 탐색 중입니다...";
+        document.getElementById('user-info-text').innerText = "서버를 찾는 중입니다.";
         let found = false;
 
+        const checkServer = async (testUrl) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); 
+            const res = await fetch(`${testUrl}/`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (res.ok) return testUrl;
+            throw new Error();
+        };
+
+        const promises = [];
         for (let i = 1; i <= 10; i++) {
             const suffix = i === 1 ? "" : i;
             const testUrl = `https://stockfish-analyzer${suffix}.serveousercontent.com`;
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1500); 
-                const res = await fetch(`${testUrl}/`, { signal: controller.signal });
-                clearTimeout(timeoutId);
+            promises.push(checkServer(testUrl));
+        }
 
-                if (res.ok) {
-                    BASE_URL = testUrl;
-                    found = true;
-                    console.log(`[연결 성공] ${BASE_URL} 에 연결되었습니다.`);
-                    break;
-                }
-            } catch (e) {
-            }
+        try {
+            BASE_URL = await Promise.any(promises);
+            found = true;
+            console.log(`[Connected] Connected to ${BASE_URL}.`);
+        } catch (e) {
         }
 
         if (!found) {
             if (retryCount < 2) {
-                document.getElementById('user-info-text').innerText = "서버가 부팅 중입니다. 잠시 후 재시도합니다...";
+                document.getElementById('user-info-text').innerText = "서버가 재부팅 중입니다. 잠시만 기다려주세요.";
                 setTimeout(() => initServerConnection(retryCount + 1), 3000);
                 return;
             }
-            document.getElementById('user-info-text').innerText = "현재 백엔드 서버가 꺼져있습니다.";
+            document.getElementById('user-info-text').innerText = "백엔드 서버가 꺼져있습니다. 관리자에게 문의해주세요.";
             return;
         }
 
@@ -288,11 +291,11 @@
         const infoText = document.getElementById('user-info-text');
         const loginBtn = document.getElementById('login-trigger-btn');
         if (user) {
-            infoText.innerHTML = `<b>${user.account_id}</b> 님 [${tierNames[user.tier]} 등급] 잔여 노드: ${(user.remaining_nodes / 1000000).toFixed(1)}M`;
+            infoText.innerHTML = `[${tierNames[user.tier]}] <b>${user.account_id}</b> [남은 노드]: ${(user.remaining_nodes / 1000000).toFixed(1)}M`;
             loginBtn.textContent = "로그아웃";
             loginBtn.onclick = () => { currentToken = null; localStorage.removeItem('chess_token'); currentUserTier = -1; updateAuthUI(null); updateDropdownUI(); };
         } else {
-            infoText.textContent = "로그인이 필요합니다.";
+            infoText.textContent = "로그인 후 이용 가능";
             loginBtn.textContent = "로그인";
             loginBtn.onclick = () => document.getElementById('auth-modal').style.display = 'flex';
         }
@@ -330,14 +333,14 @@
             const data = await res.json();
             if (res.ok) {
                 if (authMode === "register") {
-                    alert("가입 완료. 로그인해주세요."); document.getElementById('tab-login').click();
+                    alert("가입했습니다. 로그인해주세요."); document.getElementById('tab-login').click();
                 } else {
                     currentToken = data.token; localStorage.setItem('chess_token', currentToken);
                     document.getElementById('auth-modal').style.display = 'none';
                     fetchUserInfo();
                 }
             } else { alert(data.detail || "오류가 발생했습니다."); }
-        } catch(e) { alert("서버 통신 실패"); }
+        } catch(e) { alert("서버에 연결하는데 실패했습니다. 관리자에게 문의해주세요."); }
     };
 
     function parseLocalStockfishLine(line) {
@@ -364,9 +367,9 @@
     }
 
     function requestAnalysis() {
-        if (!currentToken) return alert("로그인 후 이용 가능합니다.");
+        if (!currentToken) return alert("로그인 후 이용해주세요.");
         const selectedPreset = document.getElementById('selected-preset').innerText;
-        if (presetRequirements[selectedPreset] > currentUserTier) return alert("이 요금제 등급에서는 사용할 수 없는 엔진입니다.");
+        if (presetRequirements[selectedPreset] > currentUserTier) return alert("이 요금제에서는 사용할 수 없는 엔진입니다. 요금제를 업그레이드해주세요.");
 
         if (localEngine) { localEngine.postMessage("stop"); }
         socket.emit('stop-analysis');
@@ -401,7 +404,7 @@
         if (optNodes !== null) analysisOptions.nodes = optNodes;
 
         if (IS_LOCAL_ROUTING) {
-            alert("로컬 라우팅은 데모 환경에서 비활성화 되어있습니다. 짧은 분석을 이용해주세요.");
+            alert("다른 모델을 이용해주세요.");
             toggleAnalysis();
         } else {
             socket.emit('start-analysis', analysisOptions);
