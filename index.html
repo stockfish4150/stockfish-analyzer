@@ -132,6 +132,17 @@
             transition: width 0.08s linear;
         }
 
+        @keyframes progress-flow {
+            from { background-position: 16px 0; }
+            to { background-position: 0 0; }
+        }
+
+        .progress-timeline-fill.analyzing {
+            background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent);
+            background-size: 16px 16px;
+            animation: progress-flow 1s linear infinite;
+        }
+
         .bottom-row {
             display: flex;
             align-items: center;
@@ -425,6 +436,8 @@
             socket.emit('stop-analysis');
             icon.innerText = "▶";
             icon.style.color = "#bababa";
+            
+            document.getElementById('fill-line').classList.remove('analyzing');
         }
     }
 
@@ -438,6 +451,9 @@
         document.getElementById('status-icon').innerText = "■";
         document.getElementById('status-icon').style.color = "#3b82f6";
         document.getElementById('fill-line').style.width = '0%';
+        
+        document.getElementById('fill-line').classList.add('analyzing');
+
         document.getElementById('moves-output').innerText = "Analyzing...";
 
         const analysisOptions = {
@@ -508,6 +524,8 @@
         document.getElementById('status-icon').innerText = "▶";
         document.getElementById('status-icon').style.color = "#bababa";
         document.getElementById('fill-line').style.width = '100%';
+        
+        document.getElementById('fill-line').classList.remove('analyzing');
     });
 
     function parsePvToHtml(pvString) {
