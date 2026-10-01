@@ -160,7 +160,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v2.3</div>
+        <div class="moves-line" id="moves-output">Version: v2.3.1</div>
     </div>
 </div>
 
@@ -410,22 +410,6 @@
             socket.emit('start-analysis', analysisOptions);
         }
     }
-
-    socket.on('analysis-progress', (data) => {
-        document.getElementById('stat-depth').innerText = data.depth || 0;
-        document.getElementById('stat-nodes').innerText = data.nodes ? (data.nodes / 1000000).toFixed(2) + 'M' : "0.00M";
-        if (!IS_INFINITY) { document.getElementById('fill-line').style.width = Math.min(Math.round((data.depth / TARGET_DEPTH) * 100), 100) + '%'; }
-        
-        let scoreStr = String(data.score || "0.00");
-        if (scoreStr !== "0.00" && !scoreStr.startsWith('-') && !scoreStr.startsWith('M')) scoreStr = '+' + scoreStr;
-        document.getElementById('stat-eval').innerText = scoreStr; document.getElementById('badge-eval').innerText = scoreStr;
-        if (data.pv) {
-            const moves = Array.isArray(data.pv) ? data.pv : String(data.pv).trim().split(/\s+/);
-            let html = ""; let moveNumber = 1;
-            for (let i = 0; i < moves.length; i++) { if (i % 2 === 0) { html += `<span class="move-num">${moveNumber}.</span>`; moveNumber++; } html += `<span class="move-str">${moves[i]}</span>`; }
-            document.getElementById('moves-output').innerHTML = html;
-        }
-    });
     
     socket.on('analysis-complete', (data) => {
         document.getElementById('status-icon').innerText = "▶";
