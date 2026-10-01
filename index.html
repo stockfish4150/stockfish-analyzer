@@ -39,21 +39,6 @@
             outline: none;
         }
 
-        .config-box button {
-            background-color: #81b64c;
-            color: white;
-            border: none;
-            padding: 0 24px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.95rem;
-            cursor: pointer;
-        }
-
-        .config-box button:hover {
-            background-color: #95cc5b;
-        }
-
         .panel-container {
             width: 780px;
             max-width: 100%;
@@ -313,11 +298,6 @@
             .config-box {
                 flex-direction: column;
             }
-            
-            .config-box button {
-                padding: 12px 0;
-                width: 100%;
-            }
         }
     </style>
 </head>
@@ -325,7 +305,6 @@
 
 <div class="config-box">
     <input type="text" id="fen-input" value="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1">
-    <button onclick="requestAnalysis()">분석</button>
 </div>
 
 <div class="settings-container">
@@ -398,7 +377,7 @@
 <div class="panel-container">
     <div class="top-row">
         <div class="left-controls">
-            <div class="status-indicator" id="status-icon">■</div>
+            <div class="status-indicator" id="status-icon" onclick="toggleAnalysis()" style="cursor: pointer;">▶</div>
             <div class="engine-title">Stockfish 19</div>
         </div>
         <div class="right-stats">
@@ -438,6 +417,17 @@
     let currentMaxDepth = 0;
     let currentBestPvLength = 0;
 
+    function toggleAnalysis() {
+        const icon = document.getElementById('status-icon');
+        if (icon.innerText === "▶") {
+            requestAnalysis();
+        } else {
+            socket.emit('stop-analysis');
+            icon.innerText = "▶";
+            icon.style.color = "#bababa";
+        }
+    }
+
     function requestAnalysis() {
         const fen = document.getElementById('fen-input').value;
         TARGET_DEPTH = parseInt(document.getElementById('opt-depth').value) || 20;
@@ -446,7 +436,7 @@
         currentBestPvLength = 0;
         
         document.getElementById('status-icon').innerText = "■";
-        document.getElementById('status-icon').style.color = "#81b64c";
+        document.getElementById('status-icon').style.color = "#3b82f6";
         document.getElementById('fill-line').style.width = '0%';
         document.getElementById('moves-output').innerText = "Analyzing...";
 
