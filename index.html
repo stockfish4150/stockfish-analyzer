@@ -445,7 +445,7 @@
         currentMaxDepth = 0;
         currentBestPvLength = 0;
         
-        document.getElementById('status-icon').innerText = "▶";
+        document.getElementById('status-icon').innerText = "■";
         document.getElementById('status-icon').style.color = "#81b64c";
         document.getElementById('fill-line').style.width = '0%';
         document.getElementById('moves-output').innerText = "Analyzing...";
@@ -515,7 +515,7 @@
     });
 
     socket.on('analysis-complete', (data) => {
-        document.getElementById('status-icon').innerText = "■";
+        document.getElementById('status-icon').innerText = "▶";
         document.getElementById('status-icon').style.color = "#bababa";
         document.getElementById('fill-line').style.width = '100%';
     });
