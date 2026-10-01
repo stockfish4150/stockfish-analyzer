@@ -422,7 +422,10 @@
 </div>
 
 <script>
-    const socket = io("https://stockfish-analyzer.serveousercontent.com", { transports: ['websocket'] });
+    const socket = io("https://stockfish-analyzer.serveousercontent.com", { 
+        transports: ['websocket'],
+        perMessageDeflate: true 
+    });
     
     let TARGET_DEPTH = 20;
     let IS_INFINITY = false;
@@ -577,7 +580,7 @@
         }
     }
 
-    const handleAnalysisProgress = (data) => {
+    const executeAnalysisProgress = (data) => {
         if (!data) return;
 
         const newDepth = parseInt(data.depth) || 0;
@@ -626,6 +629,21 @@
 
         if (data.pv) {
             document.getElementById('moves-output').innerHTML = parsePvToHtml(data.pv);
+        }
+    };
+
+    let pendingAnalysisData = null;
+    let animationFrameId = null;
+
+    const handleAnalysisProgress = (data) => {
+        pendingAnalysisData = data;
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                const dataToRender = pendingAnalysisData;
+                pendingAnalysisData = null;
+                animationFrameId = null;
+                executeAnalysisProgress(dataToRender);
+            });
         }
     };
 
