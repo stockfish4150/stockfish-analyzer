@@ -163,7 +163,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v3.5</div>
+        <div class="moves-line" id="moves-output">Version: v3.6</div>
     </div>
 </div>
 
@@ -379,6 +379,11 @@
             socket.emit('stop-analysis'); fetchUserInfo();
             icon.innerText = "▶"; icon.style.color = "#bababa";
             document.getElementById('fill-line').classList.remove('analyzing');
+            
+            const movesOutput = document.getElementById('moves-output');
+            if (movesOutput.innerText.includes('대기열') || movesOutput.innerText === 'Analyzing...') {
+                movesOutput.innerText = "분석 중지됨";
+            }
         }
     }
 
