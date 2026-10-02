@@ -274,6 +274,10 @@
             fetchUserInfo();
         });
 
+        socket.on('queue-status', (data) => {
+            document.getElementById('moves-output').innerText = `현재 대기열 ${data.position}번째입니다.`;
+        });
+
         fetchUserInfo();
     }
 
