@@ -163,7 +163,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v3.4</div>
+        <div class="moves-line" id="moves-output">Version: v3.5</div>
     </div>
 </div>
 
@@ -252,6 +252,11 @@
             document.getElementById('stat-nps').innerText = currentNps ? (currentNps / 1000000).toFixed(1) + ' Mn/s' : "0.0 Mn/s";
             if (currentUser && currentNodes) { document.getElementById('user-info-text').innerHTML = `[${tierNames[currentUser.tier]}] <b>${currentUser.account_id}</b> [남은 노드]: ${(Math.max(0, currentUser.remaining_nodes - currentNodes) / 1000000).toFixed(1)}M`; }
             if (!IS_INFINITY) { document.getElementById('fill-line').style.width = Math.min(Math.round((currentMaxDepth / TARGET_DEPTH) * 100), 100) + '%'; }
+            
+            const movesOutput = document.getElementById('moves-output');
+            if (movesOutput.innerText.includes('대기열')) {
+                movesOutput.innerText = "Analyzing...";
+            }
             
             if (data.score !== null && data.score !== undefined) { currentEval = String(data.score); }
             let scoreStr = currentEval;
