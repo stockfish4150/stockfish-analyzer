@@ -163,7 +163,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v3.6</div>
+        <div class="moves-line" id="moves-output">Version: v3.7</div>
     </div>
 </div>
 
@@ -251,8 +251,17 @@
             document.getElementById('stat-nodes').innerText = currentNodes ? (currentNodes / 1000000).toFixed(2) + 'M' : "0.00M";
             document.getElementById('stat-nps').innerText = currentNps ? (currentNps / 1000000).toFixed(1) + ' Mn/s' : "0.0 Mn/s";
             if (currentUser && currentNodes) { document.getElementById('user-info-text').innerHTML = `[${tierNames[currentUser.tier]}] <b>${currentUser.account_id}</b> [남은 노드]: ${(Math.max(0, currentUser.remaining_nodes - currentNodes) / 1000000).toFixed(1)}M`; }
-            if (!IS_INFINITY) { document.getElementById('fill-line').style.width = Math.min(Math.round((currentMaxDepth / TARGET_DEPTH) * 100), 100) + '%'; }
             
+            const fillLine = document.getElementById('fill-line');
+            if (IS_INFINITY) {
+                fillLine.style.width = '100%';
+                if (!fillLine.classList.contains('analyzing')) {
+                    fillLine.classList.add('analyzing');
+                }
+            } else {
+                fillLine.style.width = Math.min(Math.round((currentMaxDepth / TARGET_DEPTH) * 100), 100) + '%';
+            }
+
             const movesOutput = document.getElementById('moves-output');
             if (movesOutput.innerText.includes('대기열')) {
                 movesOutput.innerText = "Analyzing...";
