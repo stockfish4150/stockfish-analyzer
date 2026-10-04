@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stockfish Chess Analyzer</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -67,6 +68,24 @@
         .modal-input { width: 100%; background-color: #161512; border: 1px solid #3d3b36; color: #ffffff; padding: 10px; margin-bottom: 12px; border-radius: 4px; box-sizing: border-box; }
         .custom-option.disabled { color: #555555; cursor: not-allowed; }
         .custom-option.disabled::after { content: " Locked"; font-size: 0.8rem; }
+
+        .board-area { width: 780px; max-width: 100%; display: flex; gap: 16px; margin-bottom: 12px; }
+        .chessboard { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); width: 400px; height: 400px; border: 2px solid #3d3b36; border-radius: 4px; overflow: hidden; user-select: none; flex-shrink: 0; }
+        .square { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
+        .square.light { background-color: #EEEED2; }
+        .square.dark { background-color: #769656; }
+        .square.light.selected, .square.light.drag-source { background-color: #f6f669; }
+        .square.dark.selected, .square.dark.drag-source { background-color: #b9ca43; }
+        .square.valid-move::after { content: ''; width: 30%; height: 30%; background-color: rgba(0,0,0,0.2); border-radius: 50%; position: absolute; pointer-events: none; }
+        .square.valid-capture::after { content: ''; width: 85%; height: 85%; border: 6px solid rgba(0,0,0,0.2); border-radius: 50%; position: absolute; box-sizing: border-box; pointer-events: none; background-color: transparent; }
+        .palette-item.selected { background-color: #b9ca43; border-color: #f6f669; }
+        .piece { width: 85%; height: 85%; cursor: grab; z-index: 10; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
+        .piece:active { cursor: grabbing; }
+        .palette { flex: 1; background-color: #21201d; border-radius: 4px; padding: 12px; border: 1px solid #3d3b36; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-content: start; }
+        .palette-item { aspect-ratio: 1; display: flex; justify-content: center; align-items: center; background-color: #1a1916; border-radius: 4px; border: 1px solid #2d2b27; }
+        .trash-zone { grid-column: span 4; margin-top: 8px; text-align: center; color: #8b8984; padding: 16px 8px; border: 2px dashed #3d3b36; border-radius: 4px; font-size: 0.85rem; font-weight: bold; transition: all 0.2s; }
+        .trash-zone.drag-over { background-color: #2d2b27; border-color: #62615e; color: #bababa; }
+        @media (max-width: 600px) { .board-area { flex-direction: column; align-items: center; } .chessboard { width: 100%; height: auto; aspect-ratio: 1; } .palette { width: 100%; grid-template-columns: repeat(6, 1fr); } .trash-zone { grid-column: span 6; } }
     </style>
 </head>
 <body>
@@ -74,6 +93,34 @@
 <div class="auth-bar">
     <span id="user-info-text" style="color: #8b8984;">로그인 후 이용 가능</span>
     <button class="auth-btn" id="login-trigger-btn">로그인</button>
+</div>
+
+<div class="board-area">
+    <div id="chessboard" class="chessboard"></div>
+    <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+        <div class="palette" id="palette"></div>
+        <div id="game-controls" style="display: flex; gap: 8px;">
+            <button id="btn-game-start" class="auth-btn" style="flex: 1; background-color: #769656;">경기 시작</button>
+            <button id="btn-game-end" class="auth-btn" style="flex: 1; background-color: #a33; display: none;">경기 종료</button>
+        </div>
+        <div id="game-history" style="background-color: #21201d; border: 1px solid #3d3b36; border-radius: 4px; padding: 8px; flex: 1; overflow-y: auto; font-size: 0.85rem; color: #bababa; display: none; line-height: 1.5;">
+            경기가 시작됐습니다.
+        </div>
+    </div>
+</div>
+
+<div class="config-box" style="background-color: #21201d; border-radius: 4px; border: 1px solid #3d3b36; padding: 8px 14px; box-sizing: border-box; align-items: center; justify-content: flex-start; gap: 16px;">
+    <label class="setting-checkbox" style="padding-top: 0; height: auto;">
+        <input type="checkbox" id="opt-show-arrow" checked onchange="updateArrowStyle()"> 제안 화살표
+    </label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="color" id="opt-arrow-color" value="#ff7f00" oninput="updateArrowStyle()" style="padding: 0; width: 40px; height: 28px; border: none; cursor: pointer; background: none;">
+        <label style="margin-bottom: 0; font-size: 0.75rem; color: #8b8984; font-weight: 700;">투명도</label>
+        <input type="range" id="opt-arrow-opacity" min="0.1" max="1.0" step="0.1" value="0.8" oninput="updateArrowStyle()" style="width: 80px;">
+    </div>
+    <div style="flex: 1; display: flex; justify-content: flex-end;">
+        <button id="btn-notification" class="auth-btn" style="background-color: #62615e;">분석 알림 켜기</button>
+    </div>
 </div>
 
 <div class="config-box">
@@ -163,7 +210,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v3.7</div>
+        <div class="moves-line" id="moves-output">Version: v5 Preview Alpha Test</div>
     </div>
 </div>
 
@@ -181,6 +228,468 @@
 </div>
 
 <script>
+    const PIECE_PATHS = {
+        'k': '<path d="M4 20a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="m6.7 18-1-1C4.35 15.682 3 14.09 3 12a5 5 0 0 1 4.95-5c1.584 0 2.7.455 4.05 1.818C13.35 7.455 14.466 7 16.05 7A5 5 0 0 1 21 12c0 2.082-1.359 3.673-2.7 5l-1 1"/><path d="M10 4h4"/><path d="M12 2v6.818"/>',
+        'q': '<path d="M4 20a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="m12.474 5.943 1.567 5.34a1 1 0 0 0 1.75.328l2.616-3.402"/><path d="m20 9-3 9"/><path d="m5.594 8.209 2.615 3.403a1 1 0 0 0 1.75-.329l1.567-5.34"/><path d="M7 18 4 9"/><circle cx="12" cy="4" r="2"/><circle cx="20" cy="7" r="2"/><circle cx="4" cy="7" r="2"/>',
+        'r': '<path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M10 2v2"/><path d="M14 2v2"/><path d="m17 18-1-9"/><path d="M6 2v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2"/><path d="M6 4h12"/><path d="m7 18 1-9"/>',
+        'b': '<path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M15 18c1.5-.615 3-2.461 3-4.923C18 8.769 14.5 4.462 12 2 9.5 4.462 6 8.77 6 13.077 6 15.539 7.5 17.385 9 18"/><path d="m16 7-2.5 2.5"/><path d="M9 2h6"/>',
+        'n': '<path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M16.5 18c1-2 2.5-5 2.5-9a7 7 0 0 0-7-7H6.635a1 1 0 0 0-.768 1.64L7 5l-2.32 5.802a2 2 0 0 0 .95 2.526l2.87 1.456"/><path d="m15 5 1.425-1.425"/><path d="m17 8 1.53-1.53"/><path d="M9.713 12.185 7 18"/>',
+        'p': '<path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="m14.5 10 1.5 8"/><path d="M7 10h10"/><path d="m8 18 1.5-8"/><circle cx="12" cy="6" r="4"/>'
+    };
+
+    let boardState = new Array(64).fill(null);
+    let selectedPieceSource = null;
+    let selectedPieceChar = null;
+
+    let isGameActive = false;
+    let game = null;
+
+    let arrowColorOverride = null;
+    function getContrastingColor(hex) {
+        if (hex.startsWith('#')) hex = hex.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        const r = (255 - parseInt(hex.slice(0, 2), 16)).toString(16).padStart(2, '0');
+        const g = (255 - parseInt(hex.slice(2, 4), 16)).toString(16).padStart(2, '0');
+        const b = (255 - parseInt(hex.slice(4, 6), 16)).toString(16).padStart(2, '0');
+        return '#' + r + g + b;
+    }
+
+    function indexToCoord(idx) {
+        const file = String.fromCharCode(97 + (idx % 8));
+        const rank = 8 - Math.floor(idx / 8);
+        return `${file}${rank}`;
+    }
+
+    function getSvg(char) {
+        const isWhite = char === char.toUpperCase();
+        const type = char.toLowerCase();
+        const path = PIECE_PATHS[type];
+        
+        const fill = isWhite ? '#ffffff' : '#4a4a4a';
+        const stroke = '#000000';
+        const color = isWhite ? '#ffffff' : '#4a4a4a';
+        
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${fill}" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: ${color}; width: 100%; height: 100%;"><g>${path}</g></svg>`;
+    }
+
+    function createPieceEl(char) {
+        const wrap = document.createElement('div');
+        wrap.className = 'piece';
+        wrap.draggable = true;
+        wrap.dataset.piece = char;
+        wrap.innerHTML = getSvg(char);
+        wrap.addEventListener('dragstart', handleDragStart);
+        wrap.addEventListener('dragend', handleDragEnd);
+        return wrap;
+    }
+
+    function renderBoardDOM() {
+        const boardEl = document.getElementById('chessboard');
+        if (!boardEl.children.length) return;
+        for (let i = 0; i < 64; i++) {
+            const sq = boardEl.children[i];
+            sq.innerHTML = '';
+            if (boardState[i]) {
+                sq.appendChild(createPieceEl(boardState[i]));
+            }
+        }
+    }
+
+    function arrayToFen() {
+        let fenStr = "";
+        for (let r = 0; r < 8; r++) {
+            let emptyCount = 0;
+            for (let c = 0; c < 8; c++) {
+                const piece = boardState[r * 8 + c];
+                if (piece) {
+                    if (emptyCount > 0) { fenStr += emptyCount; emptyCount = 0; }
+                    fenStr += piece;
+                } else {
+                    emptyCount++;
+                }
+            }
+            if (emptyCount > 0) fenStr += emptyCount;
+            if (r < 7) fenStr += "/";
+        }
+        
+        const input = document.getElementById('fen-input');
+        const oldParts = input.value.trim().split(' ');
+        if (oldParts.length > 1) {
+            oldParts[0] = fenStr;
+            input.value = oldParts.join(' ');
+        } else {
+            input.value = fenStr + " w KQkq - 0 1";
+        }
+    }
+
+    function updateArrowStyle() {
+        const isVisible = document.getElementById('opt-show-arrow').checked;
+        const color = arrowColorOverride || document.getElementById('opt-arrow-color').value;
+        const opacity = document.getElementById('opt-arrow-opacity').value;
+        
+        const svg = document.getElementById('suggest-arrow-svg');
+        if (svg) {
+            svg.style.display = isVisible ? 'block' : 'none';
+            const line = svg.querySelector('#suggest-arrow-line');
+            let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+            if (line) {
+                x1 = line.getAttribute('x1') || 0;
+                y1 = line.getAttribute('y1') || 0;
+                x2 = line.getAttribute('x2') || 0;
+                y2 = line.getAttribute('y2') || 0;
+            }
+            svg.innerHTML = `<defs><marker id="arrowhead" markerWidth="3" markerHeight="3" refX="2" refY="1.5" orient="auto"><polygon points="0 0, 3 1.5, 0 3" fill="${color}"/></marker></defs><line id="suggest-arrow-line" stroke="${color}" stroke-width="2" marker-end="url(#arrowhead)" opacity="${opacity}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+        }
+    }
+
+    function drawArrow(move) {
+        const isVisible = document.getElementById('opt-show-arrow').checked;
+        if (!isVisible) { clearArrow(); return; }
+        
+        const color = arrowColorOverride || document.getElementById('opt-arrow-color').value;
+        const opacity = document.getElementById('opt-arrow-opacity').value;
+
+        let svg = document.getElementById('suggest-arrow-svg');
+        if (!svg) {
+            svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.id = 'suggest-arrow-svg';
+            svg.setAttribute('viewBox', '0 0 100 100');
+            svg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20;';
+            svg.innerHTML = `<defs><marker id="arrowhead" markerWidth="3" markerHeight="3" refX="2" refY="1.5" orient="auto"><polygon points="0 0, 3 1.5, 0 3" fill="${color}"/></marker></defs><line id="suggest-arrow-line" stroke="${color}" stroke-width="2" marker-end="url(#arrowhead)" opacity="${opacity}" />`;
+            document.getElementById('chessboard').style.position = 'relative';
+            document.getElementById('chessboard').appendChild(svg);
+        } else {
+            svg.style.display = 'block';
+            const line = svg.querySelector('#suggest-arrow-line');
+            let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+            if (line) {
+                x1 = line.getAttribute('x1') || 0;
+                y1 = line.getAttribute('y1') || 0;
+                x2 = line.getAttribute('x2') || 0;
+                y2 = line.getAttribute('y2') || 0;
+            }
+            svg.innerHTML = `<defs><marker id="arrowhead" markerWidth="3" markerHeight="3" refX="2" refY="1.5" orient="auto"><polygon points="0 0, 3 1.5, 0 3" fill="${color}"/></marker></defs><line id="suggest-arrow-line" stroke="${color}" stroke-width="2" marker-end="url(#arrowhead)" opacity="${opacity}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+        }
+        if(move && move.length >= 4) {
+            const x1 = ((move.charCodeAt(0) - 97) * 12.5) + 6.25;
+            const y1 = ((8 - parseInt(move[1])) * 12.5) + 6.25;
+            const x2 = ((move.charCodeAt(2) - 97) * 12.5) + 6.25;
+            const y2 = ((8 - parseInt(move[3])) * 12.5) + 6.25;
+            
+            const dx = x2 - x1, dy = y2 - y1;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const ratio = dist > 4 ? (dist - 4) / dist : 1;
+            
+            const line = svg.querySelector('#suggest-arrow-line');
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x1 + dx * ratio);
+            line.setAttribute('y2', y1 + dy * ratio);
+        }
+    }
+
+    function clearArrow() {
+        const svg = document.getElementById('suggest-arrow-svg');
+        if (svg) svg.remove();
+    }
+
+    function fenToArray(fen) {
+        clearArrow();
+        boardState.fill(null);
+        if(!fen) { renderBoardDOM(); return; }
+        const parts = fen.split(' ');
+        const ranks = parts[0].split('/');
+        let i = 0;
+        for (let r = 0; r < Math.min(ranks.length, 8); r++) {
+            for (let c = 0; c < ranks[r].length; c++) {
+                const char = ranks[r][c];
+                if (!isNaN(char)) {
+                    i += parseInt(char);
+                } else {
+                    if (i < 64) boardState[i] = char;
+                    i++;
+                }
+            }
+        }
+        renderBoardDOM();
+    }
+
+    function clearDragHighlights() {
+        document.querySelectorAll('.square.drag-source').forEach(el => el.classList.remove('drag-source'));
+        document.querySelectorAll('.square.valid-move').forEach(el => el.classList.remove('valid-move'));
+        document.querySelectorAll('.square.valid-capture').forEach(el => el.classList.remove('valid-capture'));
+    }
+
+    function handleDragEnd(e) {
+        clearDragHighlights();
+    }
+
+    function handleDragStart(e) {
+        e.dataTransfer.setData('text/plain', e.target.closest('.piece').dataset.piece);
+        const sq = e.target.closest('.square');
+        e.dataTransfer.setData('source-index', sq ? sq.dataset.index : 'palette');
+        e.dataTransfer.effectAllowed = 'copyMove';
+
+        if (sq) {
+            sq.classList.add('drag-source');
+            const sourceIndex = parseInt(sq.dataset.index);
+            const sourceCoord = indexToCoord(sourceIndex);
+            
+            let tempGame = game;
+            if (!tempGame) {
+                tempGame = new Chess();
+                tempGame.load(document.getElementById('fen-input').value);
+            }
+            
+            const moves = tempGame.moves({ square: sourceCoord, verbose: true });
+            moves.forEach(m => {
+                const targetFile = m.to.charCodeAt(0) - 97;
+                const targetRank = 8 - parseInt(m.to[1]);
+                const targetIndex = targetRank * 8 + targetFile;
+                const targetSq = document.querySelector(`.square[data-index="${targetIndex}"]`);
+                if (targetSq) {
+                    if (m.flags.includes('c') || m.flags.includes('e')) {
+                        targetSq.classList.add('valid-capture');
+                    } else {
+                        targetSq.classList.add('valid-move');
+                    }
+                }
+            });
+        }
+    }
+
+    function executeMoveLogic(piece, sourceIndex, targetIndex) {
+        if (isGameActive) {
+            if (sourceIndex === 'palette' || targetIndex === null) return false;
+            
+            const sourceCoord = indexToCoord(parseInt(sourceIndex));
+            const targetCoord = indexToCoord(parseInt(targetIndex));
+            
+            const move = game.move({ from: sourceCoord, to: targetCoord, promotion: 'q' });
+            if (move === null) return false;
+            
+            document.getElementById('fen-input').value = game.fen();
+            fenToArray(game.fen());
+            
+            const isWhite = game.turn() === 'b'; 
+            const moveNum = Math.ceil(game.history().length / 2);
+            const historyEl = document.getElementById('game-history');
+            
+            if (isWhite) {
+                historyEl.innerHTML += `${moveNum}. ${move.san} `;
+            } else {
+                historyEl.innerHTML += `${move.san}<br>`;
+            }
+            historyEl.scrollTop = historyEl.scrollHeight;
+            
+            requestAnalysis();
+            return true;
+        }
+        
+        if (sourceIndex !== 'palette') {
+            boardState[parseInt(sourceIndex)] = null;
+        }
+        if (targetIndex !== null) {
+            boardState[parseInt(targetIndex)] = piece;
+        }
+        
+        renderBoardDOM();
+        arrayToFen();
+        return true;
+    }
+
+    function handleDropLogic(e, targetIndex) {
+        const piece = e.dataTransfer.getData('text/plain');
+        const sourceIndex = e.dataTransfer.getData('source-index');
+        clearDragHighlights();
+        executeMoveLogic(piece, sourceIndex, targetIndex);
+        selectedPieceSource = null;
+        selectedPieceChar = null;
+        updateHighlight();
+    }
+
+    function updateHighlight() {
+        document.querySelectorAll('.square.selected').forEach(el => el.classList.remove('selected'));
+        document.querySelectorAll('.palette-item.selected').forEach(el => el.classList.remove('selected'));
+        document.querySelectorAll('.square.valid-move').forEach(el => el.classList.remove('valid-move'));
+        document.querySelectorAll('.square.valid-capture').forEach(el => el.classList.remove('valid-capture'));
+        
+        if (selectedPieceSource !== null) {
+            if (selectedPieceSource === 'palette') {
+                const item = document.querySelector(`.palette-item[data-piece="${selectedPieceChar}"]`);
+                if (item) item.classList.add('selected');
+            } else {
+                const sq = document.querySelector(`.square[data-index="${selectedPieceSource}"]`);
+                if (sq) sq.classList.add('selected');
+
+                let tempGame = game;
+                if (!tempGame) {
+                    tempGame = new Chess();
+                    tempGame.load(document.getElementById('fen-input').value);
+                }
+                const sourceCoord = indexToCoord(parseInt(selectedPieceSource));
+                const moves = tempGame.moves({ square: sourceCoord, verbose: true });
+                moves.forEach(m => {
+                    const targetFile = m.to.charCodeAt(0) - 97;
+                    const targetRank = 8 - parseInt(m.to[1]);
+                    const targetIndex = targetRank * 8 + targetFile;
+                    const targetSq = document.querySelector(`.square[data-index="${targetIndex}"]`);
+                    if (targetSq) {
+                        if (m.flags.includes('c') || m.flags.includes('e')) {
+                            targetSq.classList.add('valid-capture');
+                        } else {
+                            targetSq.classList.add('valid-move');
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    function handleSquareClick(index) {
+        if (selectedPieceSource === null) {
+            if (boardState[index]) {
+                selectedPieceSource = index;
+                selectedPieceChar = boardState[index];
+            }
+        } else {
+            if (selectedPieceSource === index) {
+                selectedPieceSource = null;
+                selectedPieceChar = null;
+            } else {
+                const success = executeMoveLogic(selectedPieceChar, selectedPieceSource, index);
+                if (success === false && boardState[index]) {
+                    selectedPieceSource = index;
+                    selectedPieceChar = boardState[index];
+                } else {
+                    selectedPieceSource = null;
+                    selectedPieceChar = null;
+                }
+            }
+        }
+        updateHighlight();
+    }
+
+    function initBoardUI() {
+        const colorInput = document.getElementById('opt-arrow-color');
+        const savedColor = localStorage.getItem('arrow_color');
+        if (savedColor) colorInput.value = savedColor;
+        colorInput.addEventListener('input', (e) => {
+            localStorage.setItem('arrow_color', e.target.value);
+            arrowColorOverride = null;
+        });
+
+        const showArrowInput = document.getElementById('opt-show-arrow');
+        const savedShowArrow = localStorage.getItem('arrow_show');
+        if (savedShowArrow !== null) showArrowInput.checked = savedShowArrow === 'true';
+        showArrowInput.addEventListener('change', (e) => localStorage.setItem('arrow_show', e.target.checked));
+
+        const opacityInput = document.getElementById('opt-arrow-opacity');
+        const savedOpacity = localStorage.getItem('arrow_opacity');
+        if (savedOpacity) opacityInput.value = savedOpacity;
+        opacityInput.addEventListener('input', (e) => localStorage.setItem('arrow_opacity', e.target.value));
+
+        updateArrowStyle();
+
+        const boardEl = document.getElementById('chessboard');
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const sq = document.createElement('div');
+                const isLight = (r + c) % 2 === 0;
+                sq.className = `square ${isLight ? 'light' : 'dark'}`;
+                sq.dataset.index = r * 8 + c;
+                sq.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+                sq.addEventListener('drop', e => { e.preventDefault(); handleDropLogic(e, sq.dataset.index); });
+                sq.addEventListener('click', () => handleSquareClick(sq.dataset.index));
+                boardEl.appendChild(sq);
+            }
+        }
+
+        const palette = document.getElementById('palette');
+        ['K','Q','R','B','N','P','k','q','r','b','n','p'].forEach(p => {
+            const item = document.createElement('div');
+            item.className = 'palette-item';
+            item.dataset.piece = p;
+            item.appendChild(createPieceEl(p));
+            item.addEventListener('click', () => {
+                selectedPieceSource = 'palette';
+                selectedPieceChar = p;
+                updateHighlight();
+            });
+            palette.appendChild(item);
+        });
+
+        const trash = document.createElement('div');
+        trash.className = 'trash-zone';
+        trash.innerText = 'Trash (Drop to remove)';
+        trash.addEventListener('dragover', e => { e.preventDefault(); trash.classList.add('drag-over'); });
+        trash.addEventListener('dragleave', e => trash.classList.remove('drag-over'));
+        trash.addEventListener('drop', e => {
+            e.preventDefault();
+            trash.classList.remove('drag-over');
+            handleDropLogic(e, null);
+        });
+        trash.addEventListener('click', () => {
+            if (selectedPieceSource !== null) {
+                executeMoveLogic(selectedPieceChar, selectedPieceSource, null);
+                selectedPieceSource = null;
+                selectedPieceChar = null;
+                updateHighlight();
+            }
+        });
+        palette.appendChild(trash);
+
+        const fenInput = document.getElementById('fen-input');
+        fenInput.addEventListener('input', e => fenToArray(e.target.value));
+        fenToArray(fenInput.value);
+
+        document.getElementById('btn-game-start').addEventListener('click', () => {
+            isGameActive = true;
+            document.getElementById('btn-game-start').style.display = 'none';
+            document.getElementById('btn-game-end').style.display = 'block';
+            
+            document.getElementById('palette').style.display = 'none';
+            
+            const historyEl = document.getElementById('game-history');
+            historyEl.style.display = 'block';
+            historyEl.innerHTML = '경기가 시작됐습니다.<br>';
+            
+            game = new Chess();
+            const currentFen = document.getElementById('fen-input').value;
+            if (!game.load(currentFen)) {
+                game.reset();
+                document.getElementById('fen-input').value = game.fen();
+                fenToArray(game.fen());
+            }
+            
+            requestAnalysis(); 
+        });
+
+        document.getElementById('btn-game-end').addEventListener('click', () => {
+            isGameActive = false;
+            game = null;
+            document.getElementById('btn-game-start').style.display = 'block';
+            document.getElementById('btn-game-end').style.display = 'none';
+            socket.emit('stop-analysis');
+            
+            fetchUserInfo();
+            document.getElementById('status-icon').innerText = "▶";
+            document.getElementById('status-icon').style.color = "#bababa";
+            document.getElementById('fill-line').classList.remove('analyzing');
+            const movesOutput = document.getElementById('moves-output');
+            if (movesOutput.innerText.includes('대기열') || movesOutput.innerText === 'Analyzing...') {
+                movesOutput.innerText = "분석 중지됨";
+            }
+            
+            document.getElementById('palette').style.display = 'grid';
+            document.getElementById('game-history').style.display = 'none';
+            
+            document.getElementById('game-history').innerHTML += '<br><b>경기가 종료됐습니다.</b>';
+        });
+    }
+    
+    document.addEventListener("DOMContentLoaded", initBoardUI);
+
     let presetRequirements = {};
     let presets = {};
 
@@ -267,12 +776,26 @@
                 movesOutput.innerText = "Analyzing...";
             }
             
-            if (data.score !== null && data.score !== undefined) { currentEval = String(data.score); }
+            if (data.score !== null && data.score !== undefined) { 
+                let rawScore = String(data.score);
+                const currentFen = document.getElementById('fen-input').value;
+                const isBlackToMove = currentFen.split(' ')[1] === 'b';
+                
+                if (isBlackToMove) {
+                    if (rawScore.startsWith('M')) {
+                        rawScore = rawScore.startsWith('M-') ? 'M' + rawScore.substring(2) : '-M' + rawScore.substring(1);
+                    } else if (rawScore !== "0.00") {
+                        rawScore = (parseFloat(rawScore) * -1).toFixed(2);
+                    }
+                }
+                currentEval = rawScore; 
+            }
             let scoreStr = currentEval;
-            if (scoreStr !== "0.00" && !scoreStr.startsWith('-') && !scoreStr.startsWith('M')) scoreStr = '+' + scoreStr;
+            if (scoreStr !== "0.00" && !scoreStr.startsWith('-') && !scoreStr.startsWith('M') && !scoreStr.startsWith('-M')) scoreStr = '+' + scoreStr;
             document.getElementById('stat-eval').innerText = scoreStr; document.getElementById('badge-eval').innerText = scoreStr;
             if (data.pv) {
                 const moves = Array.isArray(data.pv) ? data.pv : String(data.pv).trim().split(/\s+/);
+                if (moves.length > 0) drawArrow(moves[0]);
                 let html = ""; let moveNumber = 1;
                 for (let i = 0; i < moves.length; i++) { if (i % 2 === 0) { html += `<span class="move-num">${moveNumber}.</span>`; moveNumber++; } html += `<span class="move-str">${moves[i]}</span>`; }
                 document.getElementById('moves-output').innerHTML = html;
@@ -286,6 +809,16 @@
             document.getElementById('fill-line').classList.remove('analyzing');
             if (data.status === 'error' && data.msg) alert(data.msg);
             fetchUserInfo();
+            
+            const originalColor = document.getElementById('opt-arrow-color').value;
+            arrowColorOverride = getContrastingColor(originalColor);
+            updateArrowStyle();
+
+            if (document.hidden && Notification.permission === 'granted') {
+                new Notification("분석 완료", { body: "EVAL: " + currentEval });
+                document.title = ORIGINAL_TITLE;
+                playNotificationSound();
+            }
         });
 
         socket.on('queue-status', (data) => {
@@ -412,6 +945,8 @@
         if (!optDepth && !optTime && !optNodes) { IS_INFINITY = true; }
         if (IS_INFINITY) { optDepth = null; optTime = null; optNodes = null; }
 
+        arrowColorOverride = null;
+        clearArrow();
         TARGET_DEPTH = optDepth || 20; currentMaxDepth = 0; currentBestPvLength = 0; currentNodes = 0; currentNps = 0; currentEval = "0.00";
         
         document.getElementById('status-icon').innerText = "■"; document.getElementById('status-icon').style.color = "#3b82f6";
@@ -477,6 +1012,52 @@
         }
     });
     initServerConnection();
+
+    let audioCtx = null;
+    const ORIGINAL_TITLE = document.title;
+
+    function playNotificationSound() {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.start();
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+        osc.stop(audioCtx.currentTime + 0.5);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            document.title = ORIGINAL_TITLE;
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const notiBtn = document.getElementById('btn-notification');
+        if (Notification.permission === 'granted') {
+            notiBtn.style.backgroundColor = '#769656';
+            notiBtn.innerText = '분석 알림 켜짐';
+        }
+        
+        notiBtn.addEventListener('click', () => {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            if (Notification.permission !== 'granted') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        notiBtn.style.backgroundColor = '#769656';
+                        notiBtn.innerText = '분석 알림 켜짐';
+                    } else {
+                        alert("분석 알림을 들을 수 있도록 알림을 활성화해주세요.");
+                    }
+                });
+            }
+        });
+    });
 </script>
 </body>
 </html>
