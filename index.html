@@ -58,7 +58,9 @@
         .moves-line::-webkit-scrollbar-track { background: #1a1916; border-radius: 3px; }
         .moves-line::-webkit-scrollbar-thumb { background: #3d3b36; border-radius: 3px; }
         .moves-line::-webkit-scrollbar-thumb:hover { background: #62615e; }
-        @media (max-width: 600px) { .config-box { flex-direction: column; } }
+        .history-move { background-color: #2d2b27; color: #ffffff; padding: 2px 6px; border-radius: 3px; cursor: pointer; display: inline-block; margin-right: 4px; margin-bottom: 4px; }
+        .history-move:hover { background-color: #3d3b36; }
+        @media (max-width: 600px) { body { height: auto; min-height: 100vh; justify-content: flex-start; overflow-y: auto; } .config-box { flex-direction: column; } }
 
         .auth-bar { width: 780px; max-width: 100%; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 0.85rem; }
         .auth-btn { background-color: #3880b6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
@@ -97,13 +99,13 @@
 
 <div class="board-area">
     <div id="chessboard" class="chessboard"></div>
-    <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+    <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0;">
         <div class="palette" id="palette"></div>
         <div id="game-controls" style="display: flex; gap: 8px;">
             <button id="btn-game-start" class="auth-btn" style="flex: 1; background-color: #769656;">경기 시작</button>
             <button id="btn-game-end" class="auth-btn" style="flex: 1; background-color: #a33; display: none;">경기 종료</button>
         </div>
-        <div id="game-history" style="background-color: #21201d; border: 1px solid #3d3b36; border-radius: 4px; padding: 8px; flex: 1; overflow-y: auto; font-size: 0.85rem; color: #bababa; display: none; line-height: 1.5;">
+        <div id="game-history" style="background-color: #21201d; border: 1px solid #3d3b36; border-radius: 4px; padding: 8px; flex: 1; overflow-y: auto; font-size: 0.85rem; color: #bababa; display: none; line-height: 1.5; min-height: 0;">
             경기가 시작됐습니다.
         </div>
     </div>
@@ -117,9 +119,6 @@
         <input type="color" id="opt-arrow-color" value="#ff7f00" oninput="updateArrowStyle()" style="padding: 0; width: 40px; height: 28px; border: none; cursor: pointer; background: none;">
         <label style="margin-bottom: 0; font-size: 0.75rem; color: #8b8984; font-weight: 700;">투명도</label>
         <input type="range" id="opt-arrow-opacity" min="0.1" max="1.0" step="0.1" value="0.8" oninput="updateArrowStyle()" style="width: 80px;">
-    </div>
-    <div style="flex: 1; display: flex; justify-content: flex-end;">
-        <button id="btn-notification" class="auth-btn" style="background-color: #62615e;">분석 알림 켜기</button>
     </div>
 </div>
 
@@ -210,7 +209,7 @@
     <div class="progress-timeline"><div id="fill-line" class="progress-timeline-fill"></div></div>
     <div class="bottom-row">
         <div class="eval-badge" id="badge-eval">0.00</div>
-        <div class="moves-line" id="moves-output">Version: v5 Preview Alpha Test</div>
+        <div class="moves-line" id="moves-output">Version: v5 Beta</div>
     </div>
 </div>
 
@@ -243,6 +242,8 @@
 
     let isGameActive = false;
     let game = null;
+    let gameStartFen = "";
+    let gameMoveHistory = [];
 
     let arrowColorOverride = null;
     function getContrastingColor(hex) {
@@ -471,16 +472,8 @@
             document.getElementById('fen-input').value = game.fen();
             fenToArray(game.fen());
             
-            const isWhite = game.turn() === 'b'; 
-            const moveNum = Math.ceil(game.history().length / 2);
-            const historyEl = document.getElementById('game-history');
-            
-            if (isWhite) {
-                historyEl.innerHTML += `${moveNum}. ${move.san} `;
-            } else {
-                historyEl.innerHTML += `${move.san}<br>`;
-            }
-            historyEl.scrollTop = historyEl.scrollHeight;
+            gameMoveHistory.push(move.san);
+            renderGameHistory();
             
             requestAnalysis();
             return true;
@@ -652,7 +645,6 @@
             
             const historyEl = document.getElementById('game-history');
             historyEl.style.display = 'block';
-            historyEl.innerHTML = '경기가 시작됐습니다.<br>';
             
             game = new Chess();
             const currentFen = document.getElementById('fen-input').value;
@@ -661,8 +653,34 @@
                 document.getElementById('fen-input').value = game.fen();
                 fenToArray(game.fen());
             }
+
+            gameStartFen = game.fen();
+            gameMoveHistory = [];
+            renderGameHistory();
             
             requestAnalysis(); 
+        });
+
+        document.getElementById('btn-game-end').addEventListener('click', () => {
+            isGameActive = false;
+            game = null;
+            document.getElementById('btn-game-start').style.display = 'block';
+            document.getElementById('btn-game-end').style.display = 'none';
+            socket.emit('stop-analysis');
+            
+            fetchUserInfo();
+            document.getElementById('status-icon').innerText = "▶";
+            document.getElementById('status-icon').style.color = "#bababa";
+            document.getElementById('fill-line').classList.remove('analyzing');
+            const movesOutput = document.getElementById('moves-output');
+            if (movesOutput.innerText.includes('대기열') || movesOutput.innerText === 'Analyzing...') {
+                movesOutput.innerText = "분석 중지됨";
+            }
+            
+            document.getElementById('palette').style.display = 'grid';
+            document.getElementById('game-history').style.display = 'none';
+            
+            renderGameHistory();
         });
 
         document.getElementById('btn-game-end').addEventListener('click', () => {
@@ -813,12 +831,6 @@
             const originalColor = document.getElementById('opt-arrow-color').value;
             arrowColorOverride = getContrastingColor(originalColor);
             updateArrowStyle();
-
-            if (document.hidden && Notification.permission === 'granted') {
-                new Notification("분석 완료", { body: "EVAL: " + currentEval });
-                document.title = ORIGINAL_TITLE;
-                playNotificationSound();
-            }
         });
 
         socket.on('queue-status', (data) => {
@@ -1011,53 +1023,40 @@
             if (options && options.classList.contains('open')) options.classList.remove('open');
         }
     });
-    initServerConnection();
 
-    let audioCtx = null;
-    const ORIGINAL_TITLE = document.title;
-
-    function playNotificationSound() {
-        if (!audioCtx) return;
-        const osc = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        osc.start();
-        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
-        osc.stop(audioCtx.currentTime + 0.5);
+    function renderGameHistory() {
+        const historyEl = document.getElementById('game-history');
+        let html = '경기가 시작됐습니다.<br>';
+        for(let i=0; i<gameMoveHistory.length; i++) {
+            if (i % 2 === 0) {
+                html += `<span style="color: #62615e; margin-right: 4px; font-weight: 700;">${Math.floor(i/2) + 1}.</span>`;
+            }
+            html += `<span class="history-move" onclick="goToMove(${i})">${gameMoveHistory[i]}</span>`;
+            if (i % 2 === 1) html += '<br>';
+        }
+        if (!isGameActive && gameMoveHistory.length > 0) {
+            html += '<br><b>경기가 종료됐습니다.</b>';
+        }
+        historyEl.innerHTML = html;
+        historyEl.scrollTop = historyEl.scrollHeight;
     }
 
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-            document.title = ORIGINAL_TITLE;
+    window.goToMove = function(index) {
+        if (!isGameActive) return;
+        const newHistory = gameMoveHistory.slice(0, index + 1);
+        game.load(gameStartFen);
+        gameMoveHistory = [];
+        for (const m of newHistory) {
+            game.move(m);
+            gameMoveHistory.push(m);
         }
-    });
-
-    document.addEventListener("DOMContentLoaded", () => {
-        const notiBtn = document.getElementById('btn-notification');
-        if (Notification.permission === 'granted') {
-            notiBtn.style.backgroundColor = '#769656';
-            notiBtn.innerText = '분석 알림 켜짐';
-        }
-        
-        notiBtn.addEventListener('click', () => {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            if (Notification.permission !== 'granted') {
-                Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                        notiBtn.style.backgroundColor = '#769656';
-                        notiBtn.innerText = '분석 알림 켜짐';
-                    } else {
-                        alert("분석 알림을 들을 수 있도록 알림을 활성화해주세요.");
-                    }
-                });
-            }
-        });
-    });
+        document.getElementById('fen-input').value = game.fen();
+        fenToArray(game.fen());
+        renderGameHistory();
+        requestAnalysis();
+    };
+    
+    initServerConnection();
 </script>
 </body>
 </html>
